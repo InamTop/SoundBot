@@ -1,7 +1,6 @@
 from flask import Flask
-import os
 import asyncio
-from bot import main as main_bot
+import bot  # твой bot.py
 
 app = Flask(__name__)
 
@@ -13,11 +12,13 @@ def home():
 def webhook():
     return "ok", 200
 
-# Запускаем бот асинхронно при старте сервера
+# Запуск бота через asyncio
 async def start_bot():
-    await main_bot()
+    await bot.main()  # запускаем main() из bot.py
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.create_task(start_bot())
+    import os
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+
