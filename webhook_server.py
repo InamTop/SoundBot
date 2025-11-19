@@ -1,20 +1,23 @@
-from flask import Flask, request
-import telebot
+from flask import Flask
+import threading
+import asyncio
+import os
 
-TOKEN = "8389019229:AAFUZMPRPlt5ZR1igMCqjLq9oc6G4zg6MnQ"
+# Импортируем твой бот
+from bot import main as run_bot_main
 
-bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    update = request.stream.read().decode("utf-8")
-    bot.process_new_updates([telebot.types.Update.de_json(update)])
-    return "ok", 200
+# Запуск бота в отдельном потоке (async polling)
+def run_bot():
+    asyncio.run(run_bot_main())
 
-@app.route('/')
+threading.Thread(target=run_bot, daemon=True).start()
+
+@app.route("/")
 def home():
     return "Bot is running!"
 
-if __name__ == '__main__':
-    bot.infinity_polling()
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    return "ok", 200
