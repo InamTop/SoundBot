@@ -1,4 +1,3 @@
-# bot_soundcloud_inline_final.py
 import aiohttp
 import asyncio
 import tempfile
@@ -20,6 +19,7 @@ from telegram.ext import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# ------------------ Токены и ID ------------------
 TOKEN = "8389019229:AAFUZMPRPlt5ZR1igMCqjLq9oc6G4zg6MnQ"
 CLIENT_ID = "LMlJPYvzQSVyjYv7faMQl9W7OjTBCaq4"
 OAUTH_TOKEN = "OAuth 2-308903-768145462-LvIvHQUlZ6RKsi"
@@ -27,6 +27,7 @@ SERVICE_CHAT = -1003363147744
 
 track_cache = {}
 
+# ------------------ SoundCloud API ------------------
 class SoundCloudAPI:
     def __init__(self):
         self.headers = {}
@@ -101,7 +102,7 @@ class SoundCloudAPI:
 
 sc_api = SoundCloudAPI()
 
-# ---------------- Inline search ----------------
+# ------------------ Inline search ------------------
 async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = (update.inline_query.query or "").strip()
     if not query or len(query) < 2:
@@ -138,7 +139,7 @@ async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.inline_query.answer(results, is_personal=True, cache_time=0)
 
-# ---------------- Chosen Inline ----------------
+# ------------------ Chosen Inline ------------------
 async def chosen_inline_result_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cir = update.chosen_inline_result
     tid = cir.result_id
@@ -147,10 +148,9 @@ async def chosen_inline_result_handler(update: Update, context: ContextTypes.DEF
     if not inline_message_id:
         return
 
-    # Сразу редактируем выбранное inline-сообщение в чат
     asyncio.create_task(worker_download_and_edit_inline(tid, inline_message_id, context))
 
-# ---------------- CallbackQuery ----------------
+# ------------------ CallbackQuery ------------------
 async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = q.data or ""
@@ -164,11 +164,9 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
     if inline_message_id:
         asyncio.create_task(worker_download_and_edit_inline(tid, inline_message_id, context))
 
-# ---------------- Worker for inline messages ----------------
+# ------------------ Worker for inline messages ------------------
 async def worker_download_and_edit_inline(track_id: str, inline_message_id: str, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("Worker start: %s", track_id)
     try:
-        # Редактируем сообщение на "Скачиваем"
         await context.bot.edit_message_text(
             inline_message_id=inline_message_id,
             text="📥 Скачиваем аудио..."
@@ -200,7 +198,6 @@ async def worker_download_and_edit_inline(track_id: str, inline_message_id: str,
         duration = info.get("duration")
 
         with open(tmpname, "rb") as audio_file:
-            # Отправляем в SERVICE_CHAT для получения file_id
             sent = await context.bot.send_audio(
                 chat_id=SERVICE_CHAT,
                 audio=audio_file,
@@ -219,35 +216,37 @@ async def worker_download_and_edit_inline(track_id: str, inline_message_id: str,
                 inline_message_id=inline_message_id,
                 media=InputMediaAudio(media=file_id, caption=title)
             )
-    except Exception as e:
-        logger.exception("Worker error: %s", e)
-        await context.bot.edit_message_text(
-            inline_message_id=inline_message_id,
-            text="❌ Произошла ошибка.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Повторить", callback_data=f"dl:{track_id}")]])
-        )
     finally:
         try:
             os.unlink(tmpname)
         except Exception:
             pass
 
-# ---------------- Lifecycle ----------------
+# ------------------ Lifecycle ------------------
 async def post_init(app):
     await sc_api.get_session()
-    logger.info("Bot ready")
 
 async def post_stop(app):
     await sc_api.close_session()
-    logger.info("Bot stopped")
 
-# ---------------- Main ----------------
+# ------------------ Main ------------------
 def main():
+    # Создаем приложение
     app = ApplicationBuilder().token(TOKEN).post_init(post_init).post_shutdown(post_stop).build()
     app.add_handler(InlineQueryHandler(inline_handler))
     app.add_handler(ChosenInlineResultHandler(chosen_inline_result_handler))
     app.add_handler(CallbackQueryHandler(callback_query_handler))
-    app.run_polling(drop_pending_updates=True)
+
+    # Используем Webhook для Render Free
+    PORT = int(os.environ.get("PORT", 10000))
+    WEBHOOK_URL = f"https://soundbot-fi09.onrender.com/webhook"
+
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        webhook_url_path="/webhook",
+        webhook_url=WEBHOOK_URL
+    )
 
 if __name__ == "__main__":
     main()
